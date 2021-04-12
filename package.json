@@ -1,6 +1,6 @@
 {
-  "name": "cordova-plugin-webview-x5",
-  "version": "0.3.2-alpha.1",
+  "name": "@ju_duan/cordova-plugin-webview-x5",
+  "version": "1.0.0",
   "description": "Changes the default WebView to x5",
   "cordova": {
     "id": "cordova-plugin-webview-x5",
@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/liuxiaoy/cordova-plugin-webview-x5.git"
+    "url": "git+https://github.com/duanju/cordova-plugin-webview-x5.git"
   },
   "keywords": [
     "ecosystem:cordova",
@@ -18,20 +18,14 @@
     "webview",
     "x5"
   ],
-  "author": "liuxiaoy",
+  "author": "ju_duan",
   "license": "Apache 2.0",
   "bugs": {
-    "url": "https://github.com/liuxiaoy/cordova-plugin-webview-x5/issues"
+    "url": "https://github.com/duanju/cordova-plugin-webview-x5/issues"
   },
-  "homepage": "https://github.com/liuxiaoy/cordova-plugin-webview-x5",
-  "engines": [
-    {
-      "name": "cordova-android",
-      "version": ">=4"
-    },
-    {
-      "name": "cordova-plugman",
-      "version": ">=5.2.0"
-    }
-  ]
+  "homepage": "https://github.com/duanju/cordova-plugin-webview-x5",
+  "engines": { 
+    "cordova-android": ">=4",
+    "cordova-plugman": ">=5.2.0"
+  }
 }

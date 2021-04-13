@@ -19,6 +19,8 @@
 package org.apache.cordova.x5engine;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.ArrayList;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
@@ -40,6 +42,7 @@ import com.tencent.smtt.sdk.WebChromeClient;
 import com.tencent.smtt.sdk.WebStorage;
 import com.tencent.smtt.sdk.WebView;
 
+import android.webkit.MimeTypeMap;
 import android.webkit.PermissionRequest;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -57,6 +60,7 @@ import org.apache.cordova.LOG;
  */
 public class X5WebChromeClient extends WebChromeClient {
 
+    private static final String DEFAULT_MIME_TYPE = "*/*";
     private static final int FILECHOOSER_RESULTCODE = 5173;
     private static final String LOG_TAG = "X5WebChromeClient";
     private long MAX_QUOTA = 100 * 1024 * 1024;
@@ -217,54 +221,56 @@ public class X5WebChromeClient extends WebChromeClient {
 
             mVideoProgressView = layout;
         }
-    return mVideoProgressView;
+        return mVideoProgressView;
     }
 
-    // <input type=file> support:
-    // openFileChooser() is for pre KitKat and in KitKat mr1 (it's known broken in KitKat).
-    // For Lollipop, we use onShowFileChooser().
-    public void openFileChooser(ValueCallback<Uri> uploadMsg) {
-        this.openFileChooser(uploadMsg, "*/*");
-    }
-
-    public void openFileChooser( ValueCallback<Uri> uploadMsg, String acceptType ) {
-        this.openFileChooser(uploadMsg, acceptType, null);
-    }
-
-    public void openFileChooser(final ValueCallback<Uri> uploadMsg, String acceptType, String capture)
-    {
-        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.setType("*/*");
-        parentEngine.cordova.startActivityForResult(new CordovaPlugin() {
-            @Override
-            public void onActivityResult(int requestCode, int resultCode, Intent intent) {
-                Uri result = intent == null || resultCode != Activity.RESULT_OK ? null : intent.getData();
-                Log.d(LOG_TAG, "Receive file chooser URL: " + result);
-                uploadMsg.onReceiveValue(result);
-            }
-        }, intent, FILECHOOSER_RESULTCODE);
-    }
-
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     @Override
-    public boolean onShowFileChooser(WebView webView, final ValueCallback<Uri[]> filePathsCallback, final FileChooserParams fileChooserParams) {
+    public boolean onShowFileChooser(WebView webView, final ValueCallback<Uri[]> filePathsCallback, final WebChromeClient.FileChooserParams fileChooserParams) {
+        // Check if multiple-select is specified
+        Boolean selectMultiple = false;
+        if (fileChooserParams.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) {
+            selectMultiple = true;
+        }
         Intent intent = fileChooserParams.createIntent();
+        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, selectMultiple);
+        
+        // Uses Intent.EXTRA_MIME_TYPES to pass multiple mime types.
+        String[] acceptTypes = fileChooserParams.getAcceptTypes();
+        if (acceptTypes.length > 1) {
+            intent.setType("*/*"); // Accept all, filter mime types by Intent.EXTRA_MIME_TYPES.
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, acceptTypes);
+        }
         try {
             parentEngine.cordova.startActivityForResult(new CordovaPlugin() {
                 @Override
                 public void onActivityResult(int requestCode, int resultCode, Intent intent) {
-                    Uri[] result = FileChooserParams.parseResult(resultCode, intent);
-                    Log.d(LOG_TAG, "Receive file chooser URL: " + result);
+                    Uri[] result = null;
+                    if (resultCode ==  Activity.RESULT_OK && intent != null) {
+                        if (intent.getClipData() != null) {
+                            // handle multiple-selected files
+                            final int numSelectedFiles = intent.getClipData().getItemCount();
+                            result = new Uri[numSelectedFiles];
+                            for (int i = 0; i < numSelectedFiles; i++) {
+                                result[i] = intent.getClipData().getItemAt(i).getUri();
+                                LOG.d(LOG_TAG, "Receive file chooser URL: " + result[i]);
+                            }
+                        }
+                        else if (intent.getData() != null) {
+                            // handle single-selected file
+                            result = WebChromeClient.FileChooserParams.parseResult(resultCode, intent);
+                            LOG.d(LOG_TAG, "Receive file chooser URL: " + result);
+                        }
+                    }
                     filePathsCallback.onReceiveValue(result);
                 }
             }, intent, FILECHOOSER_RESULTCODE);
         } catch (ActivityNotFoundException e) {
-            Log.w(LOG_TAG, "No activity found to handle file chooser intent." + e);
+            LOG.w("No activity found to handle file chooser intent.", e);
             filePathsCallback.onReceiveValue(null);
         }
         return true;
     }
+
 
     @TargetApi(Build.VERSION_CODES.LOLLIPOP)
     public void onPermissionRequest(final PermissionRequest request) {

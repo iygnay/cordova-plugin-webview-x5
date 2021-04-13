@@ -49,7 +49,7 @@
         <info>
             If X5 version has upgraded,you can update x5.gradle by yourself.
             To contact me for any problems about this cordova-plugin-webview-x5!
-            https://github.com/liuxiaoy/cordova-plugin-webview-x5/issues
+            https://github.com/duanju/webview/issues
         </info>
     </platform>
 </plugin>

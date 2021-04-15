@@ -231,13 +231,16 @@ public class X5WebChromeClient extends WebChromeClient {
         if (fileChooserParams.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE) {
             selectMultiple = true;
         }
-        Intent intent = fileChooserParams.createIntent();
-        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, selectMultiple);
+        // Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        // intent.addCategory(Intent.CATEGORY_OPENABLE);
+        // intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, selectMultiple);
         
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+	    intent.setType("*/*");
+	    intent.addCategory(Intent.CATEGORY_OPENABLE);
         // Uses Intent.EXTRA_MIME_TYPES to pass multiple mime types.
         String[] acceptTypes = fileChooserParams.getAcceptTypes();
         if (acceptTypes.length > 1) {
-            intent.setType("*/*"); // Accept all, filter mime types by Intent.EXTRA_MIME_TYPES.
             intent.putExtra(Intent.EXTRA_MIME_TYPES, acceptTypes);
         }
         try {
@@ -260,10 +263,12 @@ public class X5WebChromeClient extends WebChromeClient {
                             result = WebChromeClient.FileChooserParams.parseResult(resultCode, intent);
                             LOG.d(LOG_TAG, "Receive file chooser URL: " + result);
                         }
+                    } else {
+                        LOG.d(LOG_TAG, "Failed to get chosen file. requestCode: " + resultCode);
                     }
                     filePathsCallback.onReceiveValue(result);
                 }
-            }, intent, FILECHOOSER_RESULTCODE);
+            }, Intent.createChooser(intent, "File Chooser"), FILECHOOSER_RESULTCODE);
         } catch (ActivityNotFoundException e) {
             LOG.w("No activity found to handle file chooser intent.", e);
             filePathsCallback.onReceiveValue(null);

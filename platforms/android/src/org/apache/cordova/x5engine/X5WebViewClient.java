@@ -22,10 +22,13 @@ import android.annotation.TargetApi;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Message;
+import android.webkit.MimeTypeMap;
+import androidx.webkit.WebViewAssetLoader;
 
 import com.tencent.smtt.export.external.interfaces.ClientCertRequest;
 import com.tencent.smtt.export.external.interfaces.HttpAuthHandler;
@@ -39,12 +42,14 @@ import com.tencent.smtt.sdk.WebViewClient;
 
 import org.apache.cordova.AuthenticationToken;
 import org.apache.cordova.CordovaResourceApi;
+import org.apache.cordova.CordovaPluginPathHandler;
 import org.apache.cordova.LOG;
 import org.apache.cordova.PluginManager;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Hashtable;
+import java.io.InputStream;
 
 
 /**
@@ -60,12 +65,58 @@ public class X5WebViewClient extends WebViewClient {
     protected final X5WebViewEngine parentEngine;
     private boolean doClearHistory = false;
     boolean isCurrentlyLoading;
-
+    private final WebViewAssetLoader assetLoader;
     /** The authorization tokens. */
     private Hashtable<String, AuthenticationToken> authenticationTokens = new Hashtable<String, AuthenticationToken>();
 
     public X5WebViewClient(X5WebViewEngine parentEngine) {
         this.parentEngine = parentEngine;
+
+        WebViewAssetLoader.Builder assetLoaderBuilder = new WebViewAssetLoader.Builder()
+                .setDomain(parentEngine.preferences.getString("hostname", "localhost"))
+                .setHttpAllowed(true);
+
+        assetLoaderBuilder.addPathHandler("/", path -> {
+            try {
+                // Check if there a plugins with pathHandlers
+                PluginManager pluginManager = this.parentEngine.pluginManager;
+                if (pluginManager != null) {
+                    for (CordovaPluginPathHandler handler : pluginManager.getPluginPathHandlers()) {
+                        if (handler.getPathHandler() != null) {
+                            android.webkit.WebResourceResponse response = handler.getPathHandler().handle(path);
+                            if (response != null) {
+                                return response;
+                            }
+                        };
+                    }
+                }
+
+                if (path.isEmpty()) {
+                    path = "index.html";
+                }
+                InputStream is = parentEngine.webView.getContext().getAssets().open("www/" + path, AssetManager.ACCESS_STREAMING);
+                String mimeType = "text/html";
+                String extension = MimeTypeMap.getFileExtensionFromUrl(path);
+                if (extension != null) {
+                    if (path.endsWith(".js") || path.endsWith(".mjs")) {
+                        // Make sure JS files get the proper mimetype to support ES modules
+                        mimeType = "application/javascript";
+                    } else if (path.endsWith(".wasm")) {
+                        mimeType = "application/wasm";
+                    } else {
+                        mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
+                    }
+                }
+
+                return new android.webkit.WebResourceResponse(mimeType, null, is);
+            } catch (Exception e) {
+                e.printStackTrace();
+                LOG.e(TAG, e.getMessage());
+            }
+            return null;
+        });
+
+        this.assetLoader = assetLoaderBuilder.build();
     }
 
     /**
@@ -345,32 +396,11 @@ public class X5WebViewClient extends WebViewClient {
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     @Override
     public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
-        try {
-            // Check the against the whitelist and lock out access to the WebView directory
-            // Changing this will cause problems for your application
-            if (!parentEngine.pluginManager.shouldAllowRequest(url)) {
-                LOG.w(TAG, "URL blocked by whitelist: " + url);
-                // Results in a 404.
-                return new WebResourceResponse("text/plain", "UTF-8", null);
-            }
-
-            CordovaResourceApi resourceApi = parentEngine.resourceApi;
-            Uri origUri = Uri.parse(url);
-            // Allow plugins to intercept WebView requests.
-            Uri remappedUri = resourceApi.remapUri(origUri);
-
-            if (!origUri.equals(remappedUri) || needsSpecialsInAssetUrlFix(origUri) || needsKitKatContentUrlFix(origUri)) {
-                CordovaResourceApi.OpenForReadResult result = resourceApi.openForRead(remappedUri, true);
-                return new WebResourceResponse(result.mimeType, "UTF-8", result.inputStream);
-            }
-            // If we don't need to special-case the request, let the browser load it.
+        android.webkit.WebResourceResponse resp = this.assetLoader.shouldInterceptRequest(Uri.parse(url));
+        if (resp == null) {
             return null;
-        } catch (IOException e) {
-            if (!(e instanceof FileNotFoundException)) {
-                LOG.e(TAG, "Error occurred while loading a file (returning a 404).", e);
-            }
-            // Results in a 404.
-            return new WebResourceResponse("text/plain", "UTF-8", null);
+        } else {
+            return new WebResourceResponse(resp.getMimeType(), resp.getEncoding(), resp.getData());
         }
     }
 

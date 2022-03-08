@@ -2,7 +2,7 @@
 <plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
         xmlns:android="http://schemas.android.com/apk/res/android"
         id="cordova-plugin-webview-x5"
-        version="0.3.2">
+        version="1.0.0">
 
     <name>TBS WebView</name>
     <description>use x5 for cordova to get a better webview browsing experience</description>
@@ -30,7 +30,6 @@
             <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
             <uses-permission android:name="android.permission.INTERNET" />
             <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-
         </config-file>
 
         <source-file src="platforms/android/src/org/apache/cordova/x5engine/X5CookieManager.java" target-dir="src/org/apache/cordova/x5engine"/>
@@ -45,11 +44,12 @@
         <source-file src="platforms/android/libs/x5core.aar" target-dir="libs"/>
 
         <framework src="platforms/android/x5.gradle" custom="true" type="gradleReference"/>
+        <framework src="androidx.webkit:webkit:${cordovaConfig.ANDROIDX_WEBKIT_VERSION}" />
 
         <info>
             If X5 version has upgraded,you can update x5.gradle by yourself.
             To contact me for any problems about this cordova-plugin-webview-x5!
-            https://github.com/duanju/webview/issues
+            https://github.com/iygnay/cordova-plugin-webview-x5/issues
         </info>
     </platform>
 </plugin>

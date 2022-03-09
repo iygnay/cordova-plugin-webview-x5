@@ -164,8 +164,8 @@ public class X5WebViewClient extends WebViewClient {
      * @param view
      * @param request
      */
-    @TargetApi(Build.VERSION_CODES.LOLLIPOP)
-    public void onReceivedClientCertRequest(WebView view, ClientCertRequest request)
+    @Override
+    public void onReceivedClientCertRequest (WebView view, ClientCertRequest request)
     {
 
         // Check if there is some plugin which can resolve this certificate request
@@ -238,6 +238,7 @@ public class X5WebViewClient extends WebViewClient {
      * @param failingUrl    The url that failed to load.
      */
     @Override
+    @SuppressWarnings("deprecation")
     public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
         // Ignore error due to stopLoading().
         if (!isCurrentlyLoading) {
@@ -271,7 +272,6 @@ public class X5WebViewClient extends WebViewClient {
      * @param handler       An SslErrorHandler object that will handle the user's response.
      * @param error         The SSL error object.
      */
-    @TargetApi(Build.VERSION_CODES.FROYO)
     @Override
     public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
 
@@ -293,32 +293,6 @@ public class X5WebViewClient extends WebViewClient {
             // When it doubt, lock it out!
             super.onReceivedSslError(view, handler, error);
         }
-    }
-
-    @Override
-    public void onReceivedError(WebView webView, WebResourceRequest webResourceRequest,
-            WebResourceError webResourceError) {
-        super.onReceivedError(webView, webResourceRequest, webResourceError);
-        String desc = webResourceError.getDescription().toString();
-        int code = webResourceError.getErrorCode();
-        onReceivedError(webView, code, desc, webView.getUrl());
-
-    }
-
-    @Override
-    public void onReceivedHttpError(WebView webView, WebResourceRequest webResourceRequest,
-            WebResourceResponse webResourceResponse) {
-        super.onReceivedHttpError(webView, webResourceRequest, webResourceResponse);
-    }
-
-    @Override
-    public void onTooManyRedirects(WebView webView, Message message, Message message1) {
-        super.onTooManyRedirects(webView, message, message1);
-    }
-
-    @Override
-    public void onDetectedBlankScreen(String s, int i) {
-        super.onDetectedBlankScreen(s, i);
     }
 
     /**
@@ -393,19 +367,40 @@ public class X5WebViewClient extends WebViewClient {
         this.authenticationTokens.clear();
     }
 
-    @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     @Override
+    @SuppressWarnings("deprecation")
     public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
-        android.webkit.WebResourceResponse resp = this.assetLoader.shouldInterceptRequest(Uri.parse(url));
-        if (resp == null) {
+        try {
+            // Check the against the allow list and lock out access to the WebView directory
+            // Changing this will cause problems for your application
+            if (!parentEngine.pluginManager.shouldAllowRequest(url)) {
+                LOG.w(TAG, "URL blocked by allow list: " + url);
+                // Results in a 404.
+                return new WebResourceResponse("text/plain", "UTF-8", null);
+            }
+
+            CordovaResourceApi resourceApi = parentEngine.resourceApi;
+            Uri origUri = Uri.parse(url);
+            // Allow plugins to intercept WebView requests.
+            Uri remappedUri = resourceApi.remapUri(origUri);
+
+            if (!origUri.equals(remappedUri) || needsSpecialsInAssetUrlFix(origUri) || needsContentUrlFix(origUri)) {
+                CordovaResourceApi.OpenForReadResult result = resourceApi.openForRead(remappedUri, true);
+                return new WebResourceResponse(result.mimeType, "UTF-8", result.inputStream);
+            }
+            // If we don't need to special-case the request, let the browser load it.
             return null;
-        } else {
-            return new WebResourceResponse(resp.getMimeType(), resp.getEncoding(), resp.getData());
+        } catch (IOException e) {
+            if (!(e instanceof FileNotFoundException)) {
+                LOG.e(TAG, "Error occurred while loading a file (returning a 404).", e);
+            }
+            // Results in a 404.
+            return new WebResourceResponse("text/plain", "UTF-8", null);
         }
     }
 
-    private static boolean needsKitKatContentUrlFix(Uri uri) {
-        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && "content".equals(uri.getScheme());
+    private static boolean needsContentUrlFix(Uri uri) {
+        return "content".equals(uri.getScheme());
     }
 
     private static boolean needsSpecialsInAssetUrlFix(Uri uri) {
@@ -420,11 +415,17 @@ public class X5WebViewClient extends WebViewClient {
             return false;
         }
 
-        switch(Build.VERSION.SDK_INT){
-            case Build.VERSION_CODES.ICE_CREAM_SANDWICH:
-            case Build.VERSION_CODES.ICE_CREAM_SANDWICH_MR1:
-                return true;
-        }
         return false;
+    }
+
+    @Override
+    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+        Uri url = request.getUrl();
+        android.webkit.WebResourceResponse resp = this.assetLoader.shouldInterceptRequest(url);
+        if (resp == null) {
+            return null;
+        } else {
+            return new WebResourceResponse(resp.getMimeType(), resp.getEncoding(), resp.getData());
+        }
     }
 }
